@@ -1,0 +1,104 @@
+# ==============================================================================================
+# Functions Section
+# ==============================================================================================
+
+Function Add-SecObj
+    {
+    ForEach ($server in $servers)
+        {
+        if ((Test-Connection -ComputerName $server -Quiet) -eq '$True')
+            {
+            Try
+                {([ADSI]"WinNT://$server/Administrators").Add("WinNT://$Domain/$SecObject")
+                Write-Host "$Server : '$SecObj' has been added." -ForegroundColor Green}
+            Catch 
+                {
+                    if ($error[0].Exception.Message -match "The specified account name is already a member of the group*")
+                        {Write-Host "$Server : '$SecObj' is already added." -ForegroundColor DarkYellow}
+                    Elseif ($error[0].Exception.Message -match "Access is denied.")
+                        {Write-Host "$Server : Error(Access is Denied)." -ForegroundColor Red}
+                }
+            }
+        Else
+            {Write-Host "$Server : Computer Not Reachable." -ForegroundColor Red}
+        }
+    }
+
+Function SingleComp
+    {$Servers = Read-Host -Prompt "Enter Computer Name or IP"
+        if (!$Servers) {Write-Warning "Sorry, You have not provided any inputs. Stopping the script..."
+           Break}
+    }
+
+Function MultiComp
+    {
+    $filepath = Read-Host "Enter the path for the text file"
+        if ((Test-Path $filepath) -eq $True)
+            {$Servers = Get-Content $filepath}
+        Else
+            {Write-Warning "Please provide a valid path. Script is exiting..."
+            Break}
+        if (!$Servers) 
+            {Write-Warning "Sorry, provided file doesn't not have proper Computer names."
+            Break}
+    }
+
+Write-Host "********************************" -ForegroundColor Green
+Write-Host    "Local Administrative Rights"    -ForegroundColor Green
+Write-Host           "By: Arif Khan"           -ForegroundColor Green
+Write-Host       "Created: 14/Sep/2019"        -ForegroundColor Green
+Write-Host "********************************" -ForegroundColor Green
+
+# ==============================================================================================
+# Script Body
+# ==============================================================================================
+
+#Gather User Information
+Write-Host "How would you like to proceed for Local Admin Rights (LAR) assignment?" -ForegroundColor Cyan
+Write-Host "[1] Single Computer  [2] Multiple Computers from text file" -ForegroundColor Yellow
+$userRes1 = Read-Host "Please provide your input"
+
+#Enumerates User Infrmation into the variable and validate.
+if ($userRes1 -eq "1")
+    {. SingleComp}
+Elseif ($userRes1 -eq "2")
+    {. MultiComp}
+Else
+    {Write-Warning "Sorry, You didn't provide the correct input. Please run the script again."
+    Break}
+
+#Gather User Information.
+Write-Host "Please provide the User or Group Name (DOMAIN\USER or DOMAIN\GROUP)." -ForegroundColor Cyan
+$SecObj = Read-Host "Enter the User or Group Name"
+$SecObj = $SecObj.ToUpper()
+
+#Validate the User information.
+if ($Secobj -match '.\\')
+    {$Domain,$SecObject = $SecObj.split('\')}
+Elseif (!$SecObj) 
+    {Write-Warning "Sorry, You have not provided any inputs. Stopping the script..."
+   Break}
+Else 
+    {Write-Warning "Sorry, please user backslash '\'. Stopping the script..."
+    Break}
+
+#Search User/Group information and validate.
+Try 
+    {$UserExist = (New-Object adsisearcher([adsi]"LDAP://$Domain","(SamAccountName=$SecObject)")).FindOne()}
+Catch
+    {
+    if ($error[0].Exception.Message -match "The server is not operational*")
+       {Write-Warning "Domain '$Domain' is not a trusted domain."
+       Break}
+    }
+
+#Add the Security Oject to the computer.
+If ($UserExist)
+   {Add-SecObj}
+Elseif (!$UserExist)
+   {Write-Warning "'$SecObject' was not found on '$Domain' domain."}
+
+# ========================================================================
+# END of Script
+# ======================================================================== 
+
